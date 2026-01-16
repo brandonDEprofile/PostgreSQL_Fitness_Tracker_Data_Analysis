@@ -1,0 +1,102 @@
+-- create db
+CREATE DATABASE fitness_db
+
+--Drop table if exists
+DROP TABLE IF EXISTS fit_track;
+
+--Create table
+CREATE TABLE fit_track (
+    tracker_id      SERIAL PRIMARY KEY,          
+    brand_name      VARCHAR(100)    NOT NULL,
+    device_type     VARCHAR(100)    NOT NULL,
+    model_name      VARCHAR(100)    NOT NULL,
+    color           VARCHAR(50),
+    selling_price   TEXT,
+    original_price  TEXT,
+    display         VARCHAR(100),
+    rating          NUMERIC(3,1),
+    strap_material  VARCHAR(100),
+    avg_batt_life   INTEGER
+    );
+
+-- Load the data from CSV
+COPY fit_track (
+    brand_name,
+    device_type,
+    model_name,
+    color,
+    selling_price,
+    original_price,
+    display,
+    rating,
+    strap_material,
+    avg_batt_life
+)
+FROM 'C:/WGU/D597 Task 1 Dataset 1_Fitness_trackers_clean.csv'
+WITH (FORMAT csv, HEADER true);
+
+-- Clean up numeric fields by removing commas
+UPDATE fit_track
+SET selling_price  = REPLACE(selling_price,  ',', ''),
+    original_price = REPLACE(original_price, ',', '');
+-- Convert text columns to numeric
+ALTER TABLE fit_track
+ALTER COLUMN selling_price TYPE NUMERIC(10,2)
+USING selling_price::numeric,
+ALTER COLUMN original_price TYPE NUMERIC(10,2)
+USING original_price::numeric;
+--select all data from table
+SELECT *
+FROM fit_track;
+
+-- Query 1: Top 10 trackers with a value-for-money score
+SELECT
+    tracker_id,
+    brand_name,
+    model_name,
+    selling_price,
+    rating,
+    ROUND(
+        (rating::numeric / NULLIF(selling_price::numeric, 0)),
+        4
+    ) AS value_score
+FROM fit_track
+ORDER BY value_score DESC NULLS LAST
+limit 10;
+
+-- Query 2: Compare average price and rating by brand
+SELECT
+    brand_name,
+    COUNT(*) AS num_models,
+    ROUND(AVG(rating::numeric), 2)        AS avg_rating,
+    ROUND(AVG(selling_price::numeric), 2) AS avg_price
+FROM fit_track
+GROUP BY brand_name
+ORDER BY avg_rating DESC, avg_price ASC;
+
+-- Query 3: High-rated trackers that are also affordable
+SELECT
+    tracker_id,
+    brand_name,
+    model_name,
+    selling_price,
+    rating
+FROM fit_track
+WHERE rating::numeric >= 4.0
+ORDER BY selling_price::numeric ASC, rating::numeric DESC
+LIMIT 10;
+
+
+-- 1) Expression index to speed up value_score = rating / selling_price (used in Query 1)
+CREATE INDEX idx_fit_track_value_score
+ON fit_track ( (rating / selling_price) );
+
+-- 2) Index to speed up GROUP BY brand_name (used in Query 2)
+CREATE INDEX idx_fit_track_brand
+ON fit_track (brand_name);
+
+-- 3) Index to speed up filtering/sorting by price & rating (used in Query 3)
+CREATE INDEX idx_fit_track_price_rating
+ON fit_track (selling_price, rating);
+
+
